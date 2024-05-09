@@ -50,6 +50,67 @@ const Home = ({ home, provider, account, escrow, togglePop }) => {
         setOwner(owner)
     }
 
+    const buyHandler = async () => {
+        const escrowAmount = await escrow.escrowAmount(home.id)
+        const signer = await provider.getSigner()
+
+        // Buyer deposit earnest
+        let transaction = await escrow.connect(signer).depositEarnest(home.id, { value: escrowAmount })
+        await transaction.wait()
+
+        // Buyer approves...
+        transaction = await escrow.connect(signer).approveSale(home.id)
+        await transaction.wait()
+
+        setHasBought(true)
+
+        // -- Buyer
+
+        const buyer = await escrow.buyer(home.id)
+        setBuyer(buyer)
+
+        const hasBought = await escrow.approval(home.id, buyer)
+        setHasBought(hasBought)
+    }
+
+    const inspectHandler = async () => {
+        const signer = await provider.getSigner()
+
+        // Inspector updates status
+        const transaction = await escrow.connect(signer).updateInspectionStatus(home.id, true)
+        await transaction.wait()
+
+        setHasInspected(true)
+    }
+
+    const lendHandler = async () => {
+        const signer = await provider.getSigner()
+
+        // Lender approves...
+        const transaction = await escrow.connect(signer).approveSale(home.id)
+        await transaction.wait()
+
+        // Lender sends funds to contract...
+        const lendAmount = (await escrow.purchasePrice(home.id) - await escrow.escrowAmount(home.id))
+        await signer.sendTransaction({ to: escrow.address, value: lendAmount.toString(), gasLimit: 60000 })
+
+        setHasLended(true)
+    }
+
+    const sellHandler = async () => {
+        const signer = await provider.getSigner()
+
+        // Seller approves...
+        let transaction = await escrow.connect(signer).approveSale(home.id)
+        await transaction.wait()
+
+        // Seller finalize...
+        transaction = await escrow.connect(signer).finalizeSale(home.id)
+        await transaction.wait()
+
+        setHasSold(true)
+    }
+
     useEffect(() => {
         fetchDetails()
         fetchOwner()
@@ -73,28 +134,32 @@ const Home = ({ home, provider, account, escrow, togglePop }) => {
                     <h2>{home.attributes[0].value} ETH</h2>
 
                     {owner ? (
-                        <div>
-                            Owned by {owner.slice(0,6) + "..." + owner.slice(38,42)}
+                        <div className='home__owned'>
+                            Owned by {owner.slice(0, 6) + '...' + owner.slice(38, 42)}
                         </div>
                     ) : (
                         <div>
                             {(account === inspector) ? (
-                                <button className='home__buy' >
-                                Approve Inspection
+                                <button className='home__buy' onClick={inspectHandler} disabled={hasInspected}>
+                                    Approve Inspection
                                 </button>
                             ) : (account === lender) ? (
-                                <button className='home__buy' >
-                                Approve & Lend
+                                <button className='home__buy' onClick={lendHandler} disabled={hasLended}>
+                                    Approve & Lend
                                 </button>
                             ) : (account === seller) ? (
-                                <button className='home__buy' >
-                                Approve & Sell
+                                <button className='home__buy' onClick={sellHandler} disabled={hasSold}>
+                                    Approve & Sell
                                 </button>
                             ) : (
-                                <button className='home__buy' >
-                                Buy
+                                <button className='home__buy' onClick={buyHandler} disabled={hasBought}>
+                                    Buy
                                 </button>
                             )}
+
+                            <button className='home__contact'>
+                                Contact agent
+                            </button>
                         </div>
                     )}
 
